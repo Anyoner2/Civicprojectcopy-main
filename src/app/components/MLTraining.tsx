@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Badge } from "./ui/badge";
 import { Brain, TrendingUp, CheckCircle, Zap, History } from "lucide-react";
 import { toast } from "sonner";
-import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { projectId, publicAnonKey } from "../../../utils/supabase/info";
 import { type Report } from "../data/mockData";
 import { Label } from "./ui/label";
 
@@ -57,17 +57,17 @@ export function MLTraining() {
   const fetchReports = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-27d4a71c/reports`,
+        `${(import.meta as any).env.VITE_API_URL || 'http://localhost:3000'}${(import.meta as any).env.VITE_API_PREFIX || '/api'}/reports`,
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${(import.meta as any).env.VITE_ACCESS_TOKEN || ''}`,
           },
         }
       );
       
       const data = await response.json();
       if (data.success) {
-        setReports(data.reports);
+        setReports(data.data);
       }
     } catch (error) {
       console.error("Error fetching reports:", error);
@@ -81,17 +81,17 @@ export function MLTraining() {
   const fetchMlStats = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-27d4a71c/ml-stats`,
+        `${(import.meta as any).env.VITE_API_URL || 'http://localhost:3000'}${(import.meta as any).env.VITE_API_PREFIX || '/api'}/ml-stats`,
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${(import.meta as any).env.VITE_ACCESS_TOKEN || ''}`,
           },
         }
       );
       
       const data = await response.json();
       if (data.success) {
-        setMlStats(data.stats);
+        setMlStats(data.data);
       }
     } catch (error) {
       console.error("Error fetching ML stats:", error);
@@ -120,12 +120,12 @@ export function MLTraining() {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-27d4a71c/training`,
+        `${(import.meta as any).env.VITE_API_URL || 'http://localhost:3000'}${(import.meta as any).env.VITE_API_PREFIX || '/api'}/training`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${(import.meta as any).env.VITE_ACCESS_TOKEN || ''}`,
           },
           body: JSON.stringify({
             reportId: selectedReport.id,
@@ -176,12 +176,12 @@ export function MLTraining() {
     setIsRetraining(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-27d4a71c/retrain`,
+        `${(import.meta as any).env.VITE_API_URL || 'http://localhost:3000'}${(import.meta as any).env.VITE_API_PREFIX || '/api'}/retrain`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${(import.meta as any).env.VITE_ACCESS_TOKEN || ''}`,
           },
         }
       );
@@ -216,7 +216,7 @@ export function MLTraining() {
     }
   };
 
-  const untrainedReports = reports.filter((r) => !r.isTrained);
+  const untrainedReports = reports.filter((r) => !(r as any).isTrained);
 
   return (
     <div className="space-y-6">
@@ -313,7 +313,7 @@ export function MLTraining() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+            <div className="space-y-3 max-h-100 overflow-y-auto">
               {trainingSamples.slice(0, 10).map((sample) => (
                 <div key={sample.id} className="border rounded-lg p-3 bg-gray-50">
                   <div className="flex items-start justify-between mb-2">
@@ -368,7 +368,7 @@ export function MLTraining() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+            <div className="space-y-2 max-h-150 overflow-y-auto">
               {untrainedReports.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <CheckCircle className="size-12 mx-auto mb-2 text-green-500" />

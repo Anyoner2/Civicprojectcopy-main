@@ -10,106 +10,39 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import {
   ArrowLeft,
   MapPin,
-  Filter,
   TrendingUp,
   AlertCircle,
   CheckCircle,
   Clock,
   Search
 } from "lucide-react";
-import { type Report } from "../data/mockData";
-import { toast } from "sonner";
 import { ReportMap } from "./ReportMap";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useAuth } from "../contexts/AuthContext";
-import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { useReports, useAnalytics } from "../../hooks/useReports";
 import { MLTraining } from "./MLTraining";
+import { toast } from "sonner";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
 
 export function AdminDashboard() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { logout, accessToken } = useAuth();
+  const { reports, fetchReports, updateReportStatus } = useReports();
+  const { analytics, categoryDistribution, monthlyTrends, fetchAnalytics } = useAnalytics();
+  
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [reports, setReports] = useState<Report[]>([]);
-  const [analyticsData, setAnalyticsData] = useState<any>({
-    totalReports: 0,
-    pendingReports: 0,
-    inProgressReports: 0,
-    resolvedReports: 0,
-    rejectedReports: 0,
-    averageResolutionTime: "0 days",
-    highPriorityCount: 0,
-    mediumPriorityCount: 0,
-    lowPriorityCount: 0
-  });
-  const [categoryDistribution, setCategoryDistribution] = useState<any[]>([]);
-  const [monthlyTrends, setMonthlyTrends] = useState<any[]>([]);
 
   // Fetch reports and analytics on mount
   useEffect(() => {
-    fetchReports();
-    fetchAnalytics();
-  }, []);
-
-  const fetchReports = async () => {
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-27d4a71c/reports`,
-        {
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-        }
-      );
-      
-      const data = await response.json();
-      if (data.success) {
-        setReports(data.reports);
-      } else {
-        console.error("Error fetching reports:", data.error);
-      }
-    } catch (error) {
-      console.error("Error fetching reports:", error);
-      // Fallback to mock data for local development
-      import("../data/mockData").then(({ mockReports }) => {
-        setReports(mockReports);
-      });
+    if (accessToken) {
+      fetchReports();
+      fetchAnalytics();
     }
-  };
-
-  const fetchAnalytics = async () => {
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-27d4a71c/analytics`,
-        {
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-        }
-      );
-      
-      const data = await response.json();
-      if (data.success) {
-        setAnalyticsData(data.analytics);
-        setCategoryDistribution(data.categoryDistribution);
-        setMonthlyTrends(data.monthlyTrends);
-      } else {
-        console.error("Error fetching analytics:", data.error);
-      }
-    } catch (error) {
-      console.error("Error fetching analytics:", error);
-      // Fallback to mock data for local development
-      import("../data/mockData").then(({ analyticsData, categoryDistribution, monthlyTrends }) => {
-        setAnalyticsData(analyticsData);
-        setCategoryDistribution(categoryDistribution);
-        setMonthlyTrends(monthlyTrends);
-      });
-    }
-  };
+  }, [accessToken, fetchReports, fetchAnalytics]);
 
   // Filter reports
   const filteredReports = reports.filter((report) => {
@@ -124,33 +57,12 @@ export function AdminDashboard() {
   });
 
   const handleStatusUpdate = async (reportId: string, newStatus: string) => {
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-27d4a71c/reports/${reportId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({ status: newStatus }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success(`Report status updated to: ${newStatus}`);
-        // Refresh reports and analytics
-        await fetchReports();
-        await fetchAnalytics();
-      } else {
-        toast.error("Failed to update status", {
-          description: data.error,
-        });
-      }
-    } catch (error) {
-      console.error("Error updating report status:", error);
+    const success = await updateReportStatus(reportId, newStatus);
+    if (success) {
+      toast.success(`Report status updated to: ${newStatus}`);
+      // Refresh analytics after status update
+      await fetchAnalytics();
+    } else {
       toast.error("Failed to update status");
     }
   };
@@ -230,7 +142,7 @@ export function AdminDashboard() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardDescription>Total Reports</CardDescription>
-                  <CardTitle className="text-3xl">{analyticsData.totalReports}</CardTitle>
+                  <CardTitle className="text-3xl">{analytics?.totalReports || 0}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -243,7 +155,7 @@ export function AdminDashboard() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardDescription>Pending</CardDescription>
-                  <CardTitle className="text-3xl text-yellow-600">{analyticsData.pendingReports}</CardTitle>
+                  <CardTitle className="text-3xl text-yellow-600">{analytics?.pendingReports || 0}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -256,7 +168,7 @@ export function AdminDashboard() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardDescription>In Progress</CardDescription>
-                  <CardTitle className="text-3xl text-blue-600">{analyticsData.inProgressReports}</CardTitle>
+                  <CardTitle className="text-3xl text-blue-600">{analytics?.inProgressReports || 0}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -269,12 +181,12 @@ export function AdminDashboard() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardDescription>Resolved</CardDescription>
-                  <CardTitle className="text-3xl text-green-600">{analyticsData.resolvedReports}</CardTitle>
+                  <CardTitle className="text-3xl text-green-600">{analytics?.resolvedReports || 0}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <CheckCircle className="size-4 text-green-500" />
-                    <span>Avg: {analyticsData.averageResolutionTime}</span>
+                    <span>Avg: {analytics?.averageResolutionTime || "0 days"}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -292,36 +204,36 @@ export function AdminDashboard() {
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-red-600">High Priority</span>
-                        <span className="text-sm">{analyticsData.highPriorityCount}</span>
+                        <span className="text-sm">{analytics?.highPriorityCount || 0}</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
                           className="bg-red-500 h-2 rounded-full"
-                          style={{ width: `${(analyticsData.highPriorityCount / analyticsData.totalReports) * 100}%` }}
+                          style={{ width: `${((analytics?.highPriorityCount || 0) / (analytics?.totalReports || 1)) * 100}%` }}
                         />
                       </div>
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-yellow-600">Medium Priority</span>
-                        <span className="text-sm">{analyticsData.mediumPriorityCount}</span>
+                        <span className="text-sm">{analytics?.mediumPriorityCount || 0}</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
                           className="bg-yellow-500 h-2 rounded-full"
-                          style={{ width: `${(analyticsData.mediumPriorityCount / analyticsData.totalReports) * 100}%` }}
+                          style={{ width: `${((analytics?.mediumPriorityCount || 0) / (analytics?.totalReports || 1)) * 100}%` }}
                         />
                       </div>
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-green-600">Low Priority</span>
-                        <span className="text-sm">{analyticsData.lowPriorityCount}</span>
+                        <span className="text-sm">{analytics?.lowPriorityCount || 0}</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
                           className="bg-green-500 h-2 rounded-full"
-                          style={{ width: `${(analyticsData.lowPriorityCount / analyticsData.totalReports) * 100}%` }}
+                          style={{ width: `${((analytics?.lowPriorityCount || 0) / (analytics?.totalReports || 1)) * 100}%` }}
                         />
                       </div>
                     </div>
@@ -344,7 +256,7 @@ export function AdminDashboard() {
                           <AlertCircle className="size-5 text-red-500 mt-0.5" />
                           <div className="flex-1">
                             <p className="text-sm font-medium">{report.title}</p>
-                            <p className="text-xs text-gray-500">{report.location.address}</p>
+                            <p className="text-xs text-gray-500">{report.location?.address || "Unknown location"}</p>
                           </div>
                           <Badge className={getStatusColor(report.status)}>
                             {report.status}
@@ -466,7 +378,7 @@ export function AdminDashboard() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-sm text-gray-600 max-w-xs truncate">
-                              {report.location.address}
+                              {report.location?.address || "Unknown location"}
                             </TableCell>
                             <TableCell className="text-sm text-gray-600">
                               {new Date(report.dateReported).toLocaleDateString()}
@@ -519,7 +431,7 @@ export function AdminDashboard() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
                         outerRadius={80}
                         fill="#8884d8"
                         dataKey="value"

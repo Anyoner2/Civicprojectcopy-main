@@ -17,9 +17,9 @@ export function ProtectedRoute({ children, requiredType }: ProtectedRouteProps) 
   }
 
   // If a specific user type is required, check it
-  if (requiredType && user?.type !== requiredType) {
+  if (requiredType && user?.role !== requiredType) {
     // Redirect to appropriate dashboard
-    return <Navigate to={user?.type === "admin" ? "/admin" : "/citizen"} replace />;
+    return <Navigate to={user?.role === "admin" ? "/admin" : "/citizen"} replace />;
   }
 
   return <>{children}</>;

@@ -9,46 +9,59 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Badge } from "./ui/badge";
 import { ArrowLeft, MapPin, Upload, CheckCircle, Clock, AlertCircle } from "lucide-react";
-import { type IssueCategory, type Report } from "../data/mockData";
+import { type IssueCategory } from "../data/mockData";
+import { type Report } from "../../services/api";
 import { toast } from "sonner";
 import { ReportMap } from "./ReportMap";
+import { AREAS } from "../data/areas";
 import { useAuth } from "../contexts/AuthContext";
-import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { useReports } from "../../hooks/useReports";
 
 export function CitizenDashboard() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, accessToken } = useAuth();
+  const { submitReport, isLoading: isSubmitting, error: submitError } = useReports();
+  
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     category: "" as IssueCategory | "",
     location: "",
+    latitude: -1.2921,
+    longitude: 36.8219,
   });
+  const [selectedConstituency, setSelectedConstituency] = useState<string>("");
+  const [selectedWard, setSelectedWard] = useState<string>("");
+  const [wardOptions, setWardOptions] = useState<{ name: string; lat: number; lng: number }[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [userReports, setUserReports] = useState<Report[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
 
   // Fetch user reports on mount
   useEffect(() => {
-    fetchUserReports();
-  }, [user]);
+    if (user && accessToken) {
+      fetchUserReports();
+    }
+  }, [user, accessToken]);
 
   const fetchUserReports = async () => {
-    if (!user) return;
+    if (!user || !accessToken) return;
     
     try {
+      // For now, we'll fetch all reports and filter by user
+      // In production, this would use the user-specific endpoint
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-27d4a71c/reports/user/${user.email}`,
+        `${(import.meta as any).env.VITE_API_URL || 'http://localhost:3000'}${(import.meta as any).env.VITE_API_PREFIX || '/api'}/reports`,
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${accessToken}`,
           },
         }
       );
       
       const data = await response.json();
       if (data.success) {
-        setUserReports(data.reports);
+        // Filter to only show current user's reports
+        setUserReports(data.data?.filter((r: any) => r.reportedBy === user.email) || []);
       } else {
         console.error("Error fetching user reports:", data.error);
       }
@@ -71,64 +84,56 @@ export function CitizenDashboard() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validation
-    if (!formData.title || !formData.description || !formData.category || !formData.location) {
-      toast.error("Please fill in all required fields");
+    // Detailed validation
+    const missingFields: string[] = [];
+    if (!formData.title?.trim()) missingFields.push("Title");
+    if (!formData.description?.trim()) missingFields.push("Description");
+    if (!formData.category?.trim()) missingFields.push("Category");
+    if (!formData.location?.trim()) missingFields.push("Location");
+
+    if (missingFields.length > 0) {
+      toast.error(`Missing required fields: ${missingFields.join(", ")}`);
+      console.log("Form data:", formData);
       return;
     }
 
-    setIsLoading(true);
-
     try {
-      // Submit report to backend
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-27d4a71c/reports`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({
-            title: formData.title,
-            description: formData.description,
-            category: formData.category,
-            location: {
-              lat: 40.7128, // Default location, will be updated with map selection
-              lng: -74.0060,
-              address: formData.location,
-            },
-            imageUrl: selectedImage,
-            reportedBy: user?.email || "anonymous",
-          }),
-        }
-      );
+      const report = await submitReport({
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        location: formData.location,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
+      });
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (report) {
         toast.success("Report submitted successfully!", {
-          description: `Priority: ${data.report.priority} | Severity: ${data.report.severity}/10`,
+          description: `Priority: ${report.priority} | Severity: ${report.severity}/10`,
         });
 
         // Reset form
-        setFormData({ title: "", description: "", category: "", location: "" });
+        setFormData({
+          title: "",
+          description: "",
+          category: "" as IssueCategory | "",
+          location: "",
+          latitude: -1.2921,
+          longitude: 36.8219,
+        });
         setSelectedImage(null);
         
         // Refresh user reports
         await fetchUserReports();
       } else {
-        toast.error("Failed to submit report", {
-          description: data.error,
-        });
+        // If submitReport returns null, show the error from the hook
+        const errorMsg = submitError || "Failed to submit report. Please try again.";
+        toast.error(errorMsg);
       }
-    } catch (error) {
-      console.error("Error submitting report:", error);
+    } catch (error: any) {
       toast.error("Failed to submit report", {
-        description: "Please try again later",
+        description: error.message || "Please try again later",
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -162,6 +167,45 @@ export function CitizenDashboard() {
       default:
         return null;
     }
+  };
+
+  const generateReportsCsv = (reportList: Report[]) => {
+    const fields = ["id", "title", "description", "category", "priority", "status", "location", "dateReported", "dateUpdated", "reportedBy"];
+    const rows = [fields.join(",")];
+
+    reportList.forEach((report) => {
+      const location = report.location?.address || "";
+      const row = [
+        report.id,
+        report.title,
+        report.description,
+        report.category,
+        report.priority,
+        report.status,
+        location,
+        report.dateReported,
+        report.dateUpdated,
+        report.reportedBy || "",
+      ].map((value) => `"${String(value).replace(/"/g, '""')}"`);
+
+      rows.push(row.join(","));
+    });
+
+    return rows.join("\n");
+  };
+
+  const downloadReportsCsv = (reportList: Report[]) => {
+    const csvContent = generateReportsCsv(reportList);
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `my-reports-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -254,10 +298,55 @@ export function CitizenDashboard() {
                       <Label htmlFor="location">Location *</Label>
                       <Input
                         id="location"
-                        placeholder="Enter address or click on map"
+                        placeholder="Enter address or select constituency & ward"
                         value={formData.location}
                         onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                       />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="constituency">Constituency</Label>
+                      <Select value={selectedConstituency} onValueChange={(value) => {
+                        setSelectedConstituency(value);
+                        // populate wards
+                        const found = AREAS.find(a => a.name === value);
+                        setWardOptions(found?.wards || []);
+                        // reset ward selection
+                        setSelectedWard("");
+                      }}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select constituency" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AREAS.map((c) => (
+                            <SelectItem value={c.name} key={c.name}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="ward">Ward</Label>
+                      <Select value={selectedWard} onValueChange={(value) => {
+                        setSelectedWard(value);
+                        const ward = wardOptions.find(w => w.name === value);
+                        if (ward) {
+                          const label = `${selectedConstituency} - ${ward.name}`;
+                          setFormData({ ...formData, location: label, latitude: ward.lat, longitude: ward.lng });
+                          toast.success("Location selected", { description: label });
+                        }
+                      }}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select ward" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {wardOptions.length === 0 ? (
+                            <SelectItem value="no-wards" disabled>No wards available</SelectItem>
+                          ) : wardOptions.map((w) => (
+                            <SelectItem value={w.name} key={w.name}>{w.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="space-y-2">
@@ -281,8 +370,8 @@ export function CitizenDashboard() {
                       )}
                     </div>
 
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                      {isLoading ? "Submitting..." : "Submit Report"}
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
+                      {isSubmitting ? "Submitting..." : "Submit Report"}
                     </Button>
                   </form>
                 </CardContent>
@@ -297,13 +386,10 @@ export function CitizenDashboard() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ReportMap 
+                  <ReportMap
                     reports={[]}
                     height="500px"
-                    onLocationSelect={(lat, lng, address) => {
-                      setFormData({ ...formData, location: address });
-                      toast.success("Location selected", { description: address });
-                    }}
+                    center={{ lat: formData.latitude, lng: formData.longitude, label: formData.location }}
                   />
                 </CardContent>
               </Card>
@@ -313,11 +399,16 @@ export function CitizenDashboard() {
           {/* My Reports Tab */}
           <TabsContent value="tracking">
             <Card>
-              <CardHeader>
-                <CardTitle>My Reported Issues</CardTitle>
-                <CardDescription>
-                  Track the status of your submitted reports
-                </CardDescription>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle>My Reported Issues</CardTitle>
+                  <CardDescription>
+                    Track the status of your submitted reports
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => downloadReportsCsv(userReports)} disabled={userReports.length === 0}>
+                  Download CSV
+                </Button>
               </CardHeader>
               <CardContent>
                 {userReports.length === 0 ? (

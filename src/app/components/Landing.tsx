@@ -9,12 +9,10 @@ export function Landing() {
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
 
-  // Redirect logged-in users to their appropriate dashboard
+  // No auto-redirect; allow user to choose their path after login
   useEffect(() => {
     if (isAuthenticated && user) {
-      const redirectPath = user.type === "admin" ? "/admin" : "/citizen";
-      // Don't auto-redirect - let them stay on landing if they want
-      // This gives them a chance to logout or navigate manually
+      // User is logged in, show landing with dashboard link instead of forcing navigation
     }
   }, [isAuthenticated, user]);
 
@@ -22,7 +20,7 @@ export function Landing() {
     if (!isAuthenticated) {
       navigate("/login");
     } else {
-      navigate(user?.type === "admin" ? "/admin" : "/citizen");
+      navigate(user?.role === "admin" ? "/admin" : "/citizen");
     }
   };
 
@@ -31,7 +29,7 @@ export function Landing() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100">
       {/* Header */}
       <header className="border-b bg-white/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">

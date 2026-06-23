@@ -1,17 +1,19 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import apiService from "../../services/api";
 
 interface User {
   email: string;
   name: string;
-  type: "citizen" | "admin";
-  password: string; // Mock password storage
+  role: "citizen" | "admin";
 }
 
 interface AuthContextType {
-  user: Omit<User, 'password'> | null;
+  user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string, type: "citizen" | "admin") => Promise<boolean>;
-  signup: (email: string, password: string, name: string, type: "citizen" | "admin") => Promise<boolean>;
+  isLoading: boolean;
+  error: string | null;
+  login: (email: string, password: string, role: "citizen" | "admin") => Promise<boolean>;
+  signup: (email: string, password: string, name: string, role: "citizen" | "admin") => Promise<boolean>;
   logout: () => void;
   accessToken: string | null;
 }
@@ -19,111 +21,117 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Omit<User, 'password'> | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Helper function to get users from localStorage
-  const getUsers = (): User[] => {
-    const users = localStorage.getItem("nairobireport_users");
-    return users ? JSON.parse(users) : [];
-  };
-
-  // Helper function to save users to localStorage
-  const saveUsers = (users: User[]) => {
-    localStorage.setItem("nairobireport_users", JSON.stringify(users));
-  };
-
-  // Load user from localStorage on mount
+  // Load user from localStorage and verify token on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem("nairobireport_user");
-    const savedToken = localStorage.getItem("nairobireport_token");
-    if (savedUser && savedToken) {
-      setUser(JSON.parse(savedUser));
-      setAccessToken(savedToken);
-    }
+    const initializeAuth = async () => {
+      try {
+        const savedUser = localStorage.getItem("nairobireport_user");
+        const savedToken = localStorage.getItem("nairobireport_token");
+        
+        if (savedUser && savedToken) {
+          // Verify token is still valid
+          const response = await apiService.verifySession(savedToken);
+          
+          if (response.success && response.data) {
+            setUser({
+              email: response.data.email,
+              name: response.data.name,
+              role: response.data.role,
+            });
+            setAccessToken(savedToken);
+          } else {
+            // Token invalid, clear storage
+            localStorage.removeItem("nairobireport_user");
+            localStorage.removeItem("nairobireport_token");
+            setError("Session expired. Please log in again.");
+          }
+        }
+      } catch (err) {
+        console.error("Auth initialization error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeAuth();
   }, []);
 
-  const signup = async (email: string, password: string, name: string, type: "citizen" | "admin"): Promise<boolean> => {
+  const signup = async (email: string, password: string, name: string, role: "citizen" | "admin"): Promise<boolean> => {
     try {
-      console.log("Mock signup:", { email, name, type });
+      setError(null);
+      setIsLoading(true);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await apiService.signup(email, password, name, role);
       
-      const users = getUsers();
-      
-      // Check if user already exists
-      if (users.find(u => u.email === email)) {
-        throw new Error("User already exists");
+      if (response.success && response.user) {
+        const userData: User = {
+          email: response.user.email,
+          name: response.user.name,
+          role: response.user.role,
+        };
+        
+        // Use a mock token - in real app, backend should return a token
+        const mockToken = `token-${Date.now()}`;
+        
+        setUser(userData);
+        setAccessToken(mockToken);
+        localStorage.setItem("nairobireport_user", JSON.stringify(userData));
+        localStorage.setItem("nairobireport_token", mockToken);
+        return true;
+      } else {
+        throw new Error(response.error || "Signup failed");
       }
-      
-      const newUser: User = {
-        email,
-        name,
-        type,
-        password, // In real app, this would be hashed
-      };
-      
-      users.push(newUser);
-      saveUsers(users);
-      
-      const userData = { email, name, type };
-      setUser(userData);
-      setAccessToken("mock-token-" + Date.now());
-      localStorage.setItem("nairobireport_user", JSON.stringify(userData));
-      localStorage.setItem("nairobireport_token", "mock-token-" + Date.now());
-      return true;
-    } catch (error) {
-      console.error("Signup error:", error);
-      throw error;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Signup failed";
+      setError(errorMessage);
+      console.error("Signup error:", err);
+      throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const login = async (email: string, password: string, type: "citizen" | "admin"): Promise<boolean> => {
+  const login = async (email: string, password: string, role: "citizen" | "admin"): Promise<boolean> => {
     try {
-      console.log("Mock login:", { email, type });
+      setError(null);
+      setIsLoading(true);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await apiService.login(email, password, role);
       
-      // Validate email format
-      if (!email.includes("@")) {
-        throw new Error("Invalid email format");
+      if (response.success && response.user && response.accessToken) {
+        const userData: User = {
+          email: response.user.email,
+          name: response.user.name,
+          role: response.user.role,
+        };
+        
+        setUser(userData);
+        setAccessToken(response.accessToken);
+        localStorage.setItem("nairobireport_user", JSON.stringify(userData));
+        localStorage.setItem("nairobireport_token", response.accessToken);
+        return true;
+      } else {
+        throw new Error(response.error || "Invalid email or password");
       }
-      
-      const users = getUsers();
-      const foundUser = users.find(u => u.email === email);
-      
-      // User must exist
-      if (!foundUser) {
-        throw new Error("User not found. Please sign up first.");
-      }
-      
-      // Check password
-      if (foundUser.password !== password) {
-        throw new Error("Invalid password");
-      }
-      
-      // Check that login type matches registered type
-      if (foundUser.type !== type) {
-        throw new Error(`This account is registered as a ${foundUser.type}. You can only log in as a ${foundUser.type}.`);
-      }
-      
-      const userData = { email: foundUser.email, name: foundUser.name, type: foundUser.type };
-      setUser(userData);
-      setAccessToken("mock-token-" + Date.now());
-      localStorage.setItem("nairobireport_user", JSON.stringify(userData));
-      localStorage.setItem("nairobireport_token", "mock-token-" + Date.now());
-      return true;
-    } catch (error) {
-      console.error("Login error:", error);
-      throw error;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Login failed";
+      setError(errorMessage);
+      console.error("Login error:", err);
+      throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const logout = () => {
     setUser(null);
     setAccessToken(null);
+    setError(null);
     localStorage.removeItem("nairobireport_user");
     localStorage.removeItem("nairobireport_token");
   };
@@ -133,6 +141,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isAuthenticated: !!user,
+        isLoading,
+        error,
         login,
         signup,
         logout,
