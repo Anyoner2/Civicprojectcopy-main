@@ -1,7 +1,7 @@
 [
   {
     "id": "training-1",
-    "reportId": "report-3",
+    "reportId": "report-0003",
     "category": "Water Leak",
     "description": "Burst water pipe causing flooding and making the sidewalk impassable",
     "originalPriority": "High",
@@ -15,7 +15,7 @@
   },
   {
     "id": "training-2",
-    "reportId": "report-1",
+    "reportId": "report-0001",
     "category": "Pothole",
     "description": "Dangerous pothole causing traffic accidents near Tom Mboya Street intersection",
     "originalPriority": "High",
@@ -29,7 +29,7 @@
   },
   {
     "id": "training-3",
-    "reportId": "report-3",
+    "reportId": "report-0003",
     "category": "Water Leak",
     "description": "Burst water pipe causing flooding and making the sidewalk impassable",
     "originalPriority": "High",
@@ -43,7 +43,7 @@
   },
   {
     "id": "training-4",
-    "reportId": "report-8",
+    "reportId": "report-0008",
     "category": "Pothole",
     "description": "Minor pothole that needs repair before it gets worse",
     "originalPriority": "Low",
@@ -57,7 +57,7 @@
   },
   {
     "id": "training-5",
-    "reportId": "report-1",
+    "reportId": "report-0001",
     "category": "Pothole",
     "description": "Dangerous pothole causing traffic accidents near Tom Mboya Street intersection",
     "originalPriority": "High",
@@ -71,7 +71,7 @@
   },
   {
     "id": "training-6",
-    "reportId": "report-4",
+    "reportId": "report-0004",
     "category": "Drainage",
     "description": "Drainage system clogged with debris, causing water to overflow onto the road",
     "originalPriority": "High",
@@ -85,7 +85,7 @@
   },
   {
     "id": "training-7",
-    "reportId": "report-6",
+    "reportId": "report-0006",
     "category": "Traffic Signal",
     "description": "Traffic signal stuck on red light, causing major traffic congestion",
     "originalPriority": "High",
@@ -99,7 +99,7 @@
   },
   {
     "id": "training-8",
-    "reportId": "report-8",
+    "reportId": "report-0008",
     "category": "Pothole",
     "description": "Minor pothole that needs repair before it gets worse",
     "originalPriority": "Low",
@@ -113,7 +113,7 @@
   },
   {
     "id": "training-9",
-    "reportId": "report-3",
+    "reportId": "report-0003",
     "category": "Water Leak",
     "description": "Burst water pipe causing flooding and making the sidewalk impassable",
     "originalPriority": "High",
@@ -127,7 +127,7 @@
   },
   {
     "id": "training-10",
-    "reportId": "report-3",
+    "reportId": "report-0003",
     "category": "Water Leak",
     "description": "Burst water pipe causing flooding and making the sidewalk impassable",
     "originalPriority": "High",
@@ -141,7 +141,7 @@
   },
   {
     "id": "training-11",
-    "reportId": "report-2",
+    "reportId": "report-0002",
     "category": "Street Light",
     "description": "Street light has been out for two weeks, making the area unsafe at night",
     "originalPriority": "Medium",
@@ -155,7 +155,7 @@
   },
   {
     "id": "training-12",
-    "reportId": "report-6",
+    "reportId": "report-0006",
     "category": "Traffic Signal",
     "description": "Traffic signal stuck on red light, causing major traffic congestion",
     "originalPriority": "High",
@@ -169,7 +169,7 @@
   },
   {
     "id": "training-13",
-    "reportId": "report-3",
+    "reportId": "report-0003",
     "category": "Water Leak",
     "description": "Burst water pipe causing flooding and making the sidewalk impassable",
     "originalPriority": "High",
@@ -183,7 +183,7 @@
   },
   {
     "id": "training-14",
-    "reportId": "report-6",
+    "reportId": "report-0006",
     "category": "Traffic Signal",
     "description": "Traffic signal stuck on red light, causing major traffic congestion",
     "originalPriority": "High",
@@ -197,7 +197,7 @@
   },
   {
     "id": "training-15",
-    "reportId": "report-7",
+    "reportId": "report-0007",
     "category": "Waste Management",
     "description": "Public waste bins are full and overflowing, attracting pests",
     "originalPriority": "Medium",
