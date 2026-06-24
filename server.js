@@ -272,8 +272,12 @@ app.get('/api/analytics', (req, res) => {
 app.get('/api/ml-stats', (req, res) => {
   try {
     const reportsList = Array.from(reports.values());
-    const trainedReports = trainingData.length;
-    const untrainedReports = reportsList.length - trainedReports;
+    const trainedReportIds = [...new Set(trainingData.map(t => t.reportId))];
+    const trainedReports = trainedReportIds.length;
+    const untrainedReports = Math.max(0, reportsList.length - trainedReports);
+    const lastTrainedAt = trainingData.length > 0
+      ? trainingData.reduce((latest, sample) => sample.timestamp > latest ? sample.timestamp : latest, trainingData[0].timestamp)
+      : null;
     
     const stats = {
       totalReports: reportsList.length,
@@ -281,7 +285,7 @@ app.get('/api/ml-stats', (req, res) => {
       untrainedReports,
       trainingDataSamples: trainingData.length,
       modelAccuracy: trainedReports > 0 ? `${Math.min(95, 60 + trainedReports * 2)}%` : "0%",
-      lastTrainedAt: trainingData.length > 0 ? trainingData[trainingData.length - 1].timestamp : null,
+      lastTrainedAt,
     };
     
     res.json({ success: true, data: stats });
@@ -303,6 +307,16 @@ app.post('/api/training', (req, res) => {
       correctedRiskFactor,
       timestamp: new Date().toISOString()
     });
+
+    const report = reports.get(reportId);
+    if (report) {
+      report.isTrained = true;
+      report.priority = correctedPriority;
+      report.severity = correctedSeverity;
+      report.riskFactor = correctedRiskFactor;
+      report.dateUpdated = new Date().toISOString();
+      reports.set(reportId, report);
+    }
     
     res.json({ success: true, message: 'Training data submitted' });
   } catch (error) {
