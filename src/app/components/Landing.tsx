@@ -30,7 +30,7 @@ export function Landing() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+    <div className="relative min-h-screen overflow-hidden bg-slate-950/60 text-white">
       <InfrastructureBackground />
       <div className="relative z-10">
       {/* Header */}
@@ -70,10 +70,10 @@ export function Landing() {
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-16">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h1 className="text-5xl font-bold mb-6 text-gray-900">
+          <h1 className="text-5xl font-bold mb-6 text-white">
             Machine Learning Crowdsourcing Platform
           </h1>
-          <p className="text-xl text-gray-600 mb-8">
+          <p className="text-xl text-slate-100 mb-8">
             Automated Reporting and Prioritization of Urban Infrastructure Issues
           </p>
           <div className="flex gap-4 justify-center">
@@ -82,7 +82,7 @@ export function Landing() {
             </Button>
           </div>
           {!isAuthenticated && (
-            <p className="text-sm text-gray-500 mt-4">
+            <p className="text-sm text-slate-200 mt-4">
               * Please log in to submit reports and access dashboards
             </p>
           )}

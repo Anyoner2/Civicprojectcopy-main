@@ -9,7 +9,7 @@ export function InfrastructureBackground() {
             'url("https://images.unsplash.com/photo-1509395176047-4a66953fd231?auto=format&fit=crop&w=1600&q=80")',
         }}
       />
-      <div className="absolute inset-0 bg-slate-950/75" />
+      <div className="absolute inset-0 bg-slate-950/40" />
     </div>
   );
 }
