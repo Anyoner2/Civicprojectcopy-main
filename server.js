@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import Database from 'better-sqlite3';
 
 const app = express();
 const PORT = 3000;
@@ -8,9 +10,35 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// In-memory storage
-const reports = new Map();
-const users = new Map();
+const dbPath = path.resolve('civic_app.db');
+const db = new Database(dbPath);
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS users (
+  email TEXT PRIMARY KEY,
+  password TEXT NOT NULL,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS reports (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  category TEXT NOT NULL,
+  location_address TEXT NOT NULL,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  priority TEXT NOT NULL,
+  severity INTEGER NOT NULL,
+  riskFactor REAL NOT NULL,
+  status TEXT NOT NULL,
+  dateReported TEXT NOT NULL,
+  dateUpdated TEXT NOT NULL,
+  reportedBy TEXT NOT NULL
+);
+`);
+
 const trainingData = [];
 
 // Helper: Generate ID
@@ -53,12 +81,15 @@ app.post('/api/signup', (req, res) => {
     if (!email || !password || !name || !role) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
-    
-    if (users.has(email)) {
+
+    const existingUser = db.prepare('SELECT email FROM users WHERE email = ?').get(email);
+    if (existingUser) {
       return res.status(400).json({ success: false, error: 'User already exists' });
     }
-    
-    users.set(email, { email, password, name, role });
+
+    db.prepare('INSERT INTO users (email, password, name, role) VALUES (?, ?, ?, ?)')
+      .run(email, password, name, role);
+
     console.log(`✓ User signed up: ${email} (${role})`);
     
     res.json({
@@ -78,7 +109,7 @@ app.post('/api/login', (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
     
-    const user = users.get(email);
+    const user = db.prepare('SELECT email, password, name, role FROM users WHERE email = ?').get(email);
     if (!user || user.password !== password) {
       return res.status(401).json({ success: false, error: 'Invalid email or password' });
     }
@@ -114,7 +145,11 @@ app.get('/api/verify-session', (req, res) => {
     
     try {
       const data = JSON.parse(Buffer.from(token, 'base64').toString());
-      const user = users.get(data.email);
+      const user = db.prepare('SELECT email, name, role FROM users WHERE email = ?').get(data.email);
+      
+      if (!user) {
+        return res.status(401).json({ success: false, error: 'Invalid token' });
+      }
       
       res.json({
         success: true,
@@ -150,27 +185,52 @@ app.post('/api/reports', (req, res) => {
     const reportId = `report-${generateId()}`;
     const mlResults = classifyReport({ title, description, category });
     
-    const report = {
-      id: reportId,
+    const dateReported = new Date().toISOString();
+    
+    db.prepare(
+      `INSERT INTO reports (
+        id, title, description, category, location_address,
+        latitude, longitude, priority, severity, riskFactor,
+        status, dateReported, dateUpdated, reportedBy
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      reportId,
       title,
       description,
       category,
-      location: { address: location, lat: latitude || 0, lng: longitude || 0 },
-      latitude,
-      longitude,
-      priority: mlResults.priority,
-      severity: mlResults.severity,
-      riskFactor: mlResults.riskFactor,
-      status: 'Pending',
-      dateReported: new Date().toISOString(),
-      dateUpdated: new Date().toISOString(),
+      location,
+      latitude || 0,
+      longitude || 0,
+      mlResults.priority,
+      mlResults.severity,
+      mlResults.riskFactor,
+      'Pending',
+      dateReported,
+      dateReported,
       reportedBy,
-    };
+    );
     
-    reports.set(reportId, report);
     console.log(`✓ Report created: ${reportId} by ${reportedBy}`);
     
-    res.json({ success: true, data: report });
+    res.json({
+      success: true,
+      data: {
+        id: reportId,
+        title,
+        description,
+        category,
+        location: { address: location, lat: latitude || 0, lng: longitude || 0 },
+        latitude,
+        longitude,
+        priority: mlResults.priority,
+        severity: mlResults.severity,
+        riskFactor: mlResults.riskFactor,
+        status: 'Pending',
+        dateReported,
+        dateUpdated: dateReported,
+        reportedBy,
+      }
+    });
   } catch (error) {
     console.error('Error creating report:', error);
     res.status(500).json({ success: false, error: String(error) });
@@ -179,9 +239,12 @@ app.post('/api/reports', (req, res) => {
 
 app.get('/api/reports', (req, res) => {
   try {
-    const reportsList = Array.from(reports.values());
+    const reportsList = db.prepare('SELECT * FROM reports').all();
     console.log(`✓ Fetched ${reportsList.length} reports`);
-    res.json({ success: true, data: reportsList });
+    res.json({ success: true, data: reportsList.map((report) => ({
+      ...report,
+      location: { address: report.location_address, lat: report.latitude, lng: report.longitude },
+    })) });
   } catch (error) {
     res.status(500).json({ success: false, error: String(error) });
   }
@@ -190,9 +253,12 @@ app.get('/api/reports', (req, res) => {
 app.get('/api/reports/user/:userId', (req, res) => {
   try {
     const userId = req.params.userId;
-    const userReports = Array.from(reports.values()).filter(r => r.reportedBy === userId);
+    const userReports = db.prepare('SELECT * FROM reports WHERE reportedBy = ?').all(userId);
     console.log(`✓ Fetched ${userReports.length} reports for user ${userId}`);
-    res.json({ success: true, data: userReports });
+    res.json({ success: true, data: userReports.map((report) => ({
+      ...report,
+      location: { address: report.location_address, lat: report.latitude, lng: report.longitude },
+    })) });
   } catch (error) {
     res.status(500).json({ success: false, error: String(error) });
   }
@@ -203,17 +269,17 @@ app.put('/api/reports/:id', (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
     
-    const report = reports.get(id);
+    const report = db.prepare('SELECT * FROM reports WHERE id = ?').get(id);
     if (!report) {
       return res.status(404).json({ success: false, error: 'Report not found' });
     }
     
-    report.status = status;
-    report.dateUpdated = new Date().toISOString();
-    reports.set(id, report);
+    const dateUpdated = new Date().toISOString();
+    db.prepare('UPDATE reports SET status = ?, dateUpdated = ? WHERE id = ?').run(status, dateUpdated, id);
     
+    const updatedReport = db.prepare('SELECT * FROM reports WHERE id = ?').get(id);
     console.log(`✓ Report ${id} status updated to ${status}`);
-    res.json({ success: true, data: report });
+    res.json({ success: true, data: { ...updatedReport, location: { address: updatedReport.location_address, lat: updatedReport.latitude, lng: updatedReport.longitude } } });
   } catch (error) {
     res.status(500).json({ success: false, error: String(error) });
   }
@@ -222,7 +288,7 @@ app.put('/api/reports/:id', (req, res) => {
 // Analytics
 app.get('/api/analytics', (req, res) => {
   try {
-    const reportsList = Array.from(reports.values());
+    const reportsList = db.prepare('SELECT * FROM reports').all();
     
     // Category distribution
     const categoryCount = {};
@@ -271,7 +337,7 @@ app.get('/api/analytics', (req, res) => {
 // ML Stats
 app.get('/api/ml-stats', (req, res) => {
   try {
-    const reportsList = Array.from(reports.values());
+    const reportsList = db.prepare('SELECT * FROM reports').all();
     const trainedReportIds = [...new Set(trainingData.map(t => t.reportId))];
     const trainedReports = trainedReportIds.length;
     const untrainedReports = Math.max(0, reportsList.length - trainedReports);
@@ -308,14 +374,11 @@ app.post('/api/training', (req, res) => {
       timestamp: new Date().toISOString()
     });
 
-    const report = reports.get(reportId);
+    const report = db.prepare('SELECT * FROM reports WHERE id = ?').get(reportId);
     if (report) {
-      report.isTrained = true;
-      report.priority = correctedPriority;
-      report.severity = correctedSeverity;
-      report.riskFactor = correctedRiskFactor;
-      report.dateUpdated = new Date().toISOString();
-      reports.set(reportId, report);
+      db.prepare(
+        'UPDATE reports SET priority = ?, severity = ?, riskFactor = ?, dateUpdated = ? WHERE id = ?'
+      ).run(correctedPriority, correctedSeverity, correctedRiskFactor, new Date().toISOString(), reportId);
     }
     
     res.json({ success: true, message: 'Training data submitted' });
@@ -344,5 +407,5 @@ app.post('/api/retrain', (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n🚀 Local API Server running at http://localhost:${PORT}`);
   console.log(`📝 Report endpoint: POST http://localhost:${PORT}/api/reports`);
-  console.log(`💾 Using in-memory storage (data resets on server restart)\n`);
+  console.log(`💾 Using SQLite storage at ${dbPath}\n`);
 });
