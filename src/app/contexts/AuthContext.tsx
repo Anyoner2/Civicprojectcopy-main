@@ -68,20 +68,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       const response = await apiService.signup(email, password, name, role);
       
-      if (response.success && response.user) {
+      if (response.success && response.user && response.accessToken) {
         const userData: User = {
           email: response.user.email,
           name: response.user.name,
           role: response.user.role,
         };
         
-        // Use a mock token - in real app, backend should return a token
-        const mockToken = `token-${Date.now()}`;
-        
         setUser(userData);
-        setAccessToken(mockToken);
+        setAccessToken(response.accessToken);
         localStorage.setItem("nairobireport_user", JSON.stringify(userData));
-        localStorage.setItem("nairobireport_token", mockToken);
+        localStorage.setItem("nairobireport_token", response.accessToken);
         return true;
       } else {
         throw new Error(response.error || "Signup failed");

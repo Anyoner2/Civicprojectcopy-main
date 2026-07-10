@@ -90,11 +90,13 @@ app.post('/api/signup', (req, res) => {
     db.prepare('INSERT INTO users (email, password, name, role) VALUES (?, ?, ?, ?)')
       .run(email, password, name, role);
 
+    const mockToken = Buffer.from(JSON.stringify({ email, role, iat: Date.now() })).toString('base64');
     console.log(`✓ User signed up: ${email} (${role})`);
     
     res.json({
       success: true,
-      user: { email, name, role }
+      user: { email, name, role },
+      accessToken: mockToken
     });
   } catch (error) {
     res.status(500).json({ success: false, error: String(error) });
@@ -153,7 +155,7 @@ app.get('/api/verify-session', (req, res) => {
       
       res.json({
         success: true,
-        user: { email: user.email, name: user.name, role: user.role }
+        data: { email: user.email, name: user.name, role: user.role }
       });
     } catch {
       return res.status(401).json({ success: false, error: 'Invalid token' });
