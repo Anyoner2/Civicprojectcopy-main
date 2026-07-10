@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { MapPin, AlertCircle, TrendingUp, Users } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useEffect } from "react";
+import { InfrastructureBackground } from "./InfrastructureBackground";
 
 export function Landing() {
   const navigate = useNavigate();
@@ -29,7 +30,9 @@ export function Landing() {
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100">
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+      <InfrastructureBackground />
+      <div className="relative z-10">
       {/* Header */}
       <header className="border-b bg-white/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -188,13 +191,14 @@ export function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-8">
+      <footer className="bg-slate-950/80 text-white py-8 backdrop-blur-sm">
         <div className="container mx-auto px-4 text-center">
           <p className="text-gray-400">
             © 2026 Nairobi Civic Report Platform. Powered by Machine Learning for Smart Cities.
           </p>
         </div>
       </footer>
+      </div>
     </div>
   );
 }
