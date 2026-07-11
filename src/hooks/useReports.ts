@@ -161,7 +161,7 @@ export function useAnalytics() {
       const response = await apiService.getAnalytics(accessToken);
       
       if (response.success && response.data) {
-        setAnalytics(response.data.analytics);
+        setAnalytics(response.data);
         setCategoryDistribution(response.data.categoryDistribution || []);
         setMonthlyTrends(response.data.monthlyTrends || []);
       } else {
