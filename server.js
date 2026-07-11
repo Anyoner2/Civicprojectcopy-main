@@ -41,6 +41,46 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 `);
 
+function ensureReportSchema() {
+  const existingColumns = new Set(
+    db.prepare('PRAGMA table_info(reports)').all().map((column) => column.name)
+  );
+
+  const migrations = [];
+  if (!existingColumns.has('location_address')) migrations.push('ALTER TABLE reports ADD COLUMN location_address TEXT');
+  if (!existingColumns.has('latitude')) migrations.push('ALTER TABLE reports ADD COLUMN latitude REAL');
+  if (!existingColumns.has('longitude')) migrations.push('ALTER TABLE reports ADD COLUMN longitude REAL');
+  if (!existingColumns.has('priority')) migrations.push('ALTER TABLE reports ADD COLUMN priority TEXT');
+  if (!existingColumns.has('severity')) migrations.push('ALTER TABLE reports ADD COLUMN severity INTEGER');
+  if (!existingColumns.has('riskFactor')) migrations.push('ALTER TABLE reports ADD COLUMN riskFactor REAL');
+  if (!existingColumns.has('status')) migrations.push('ALTER TABLE reports ADD COLUMN status TEXT');
+  if (!existingColumns.has('dateReported')) migrations.push('ALTER TABLE reports ADD COLUMN dateReported TEXT');
+  if (!existingColumns.has('dateUpdated')) migrations.push('ALTER TABLE reports ADD COLUMN dateUpdated TEXT');
+  if (!existingColumns.has('reportedBy')) migrations.push('ALTER TABLE reports ADD COLUMN reportedBy TEXT');
+
+  for (const migration of migrations) {
+    db.exec(migration);
+  }
+}
+
+ensureReportSchema();
+
+function getColumnValue(report, camelKey, snakeKey) {
+  return report?.[camelKey] ?? report?.[snakeKey];
+}
+
+function normalizeReport(report) {
+  if (!report) return report;
+
+  return {
+    ...report,
+    riskFactor: getColumnValue(report, 'riskFactor', 'risk_factor'),
+    dateReported: getColumnValue(report, 'dateReported', 'date_reported'),
+    dateUpdated: getColumnValue(report, 'dateUpdated', 'date_updated'),
+    reportedBy: getColumnValue(report, 'reportedBy', 'reported_by'),
+  };
+}
+
 const trainingData = [];
 
 // Helper: Generate ID
@@ -173,29 +213,42 @@ app.post('/api/reports', async (req, res) => {
     const mlResults = await classifyReport({ title, description, category });
     
     const dateReported = new Date().toISOString();
-    
-    db.prepare(
-      `INSERT INTO reports (
-        id, title, description, category, location_address,
-        latitude, longitude, priority, severity, riskFactor,
-        status, dateReported, dateUpdated, reportedBy
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      reportId,
-      title,
-      description,
-      category,
-      location,
-      latitude || 0,
-      longitude || 0,
-      mlResults.priority,
-      mlResults.severity,
-      mlResults.riskFactor,
-      'Pending',
-      dateReported,
-      dateReported,
-      reportedBy,
-    );
+    const reportColumns = db.prepare('PRAGMA table_info(reports)').all().map((column) => column.name);
+    const insertColumns = [];
+    const insertValues = [];
+
+    const addColumn = (column, value) => {
+      if (reportColumns.includes(column)) {
+        insertColumns.push(column);
+        insertValues.push(value);
+      }
+    };
+
+    addColumn('id', reportId);
+    addColumn('title', title);
+    addColumn('description', description);
+    addColumn('category', category);
+    addColumn('location_address', location);
+    addColumn('latitude', latitude || 0);
+    addColumn('longitude', longitude || 0);
+    addColumn('priority', mlResults.priority);
+    addColumn('severity', mlResults.severity);
+    addColumn('risk_factor', mlResults.riskFactor);
+    addColumn('riskFactor', mlResults.riskFactor);
+    addColumn('status', 'Pending');
+    addColumn('date_reported', dateReported);
+    addColumn('dateReported', dateReported);
+    addColumn('date_updated', dateReported);
+    addColumn('dateUpdated', dateReported);
+    addColumn('reported_by', reportedBy);
+    addColumn('reportedBy', reportedBy);
+
+    if (insertColumns.length === 0) {
+      throw new Error('No compatible report columns were found in the database schema.');
+    }
+
+    db.prepare(`INSERT INTO reports (${insertColumns.join(', ')}) VALUES (${insertColumns.map(() => '?').join(', ')})`)
+      .run(...insertValues);
     
     console.log(`✓ Report created: ${reportId} by ${reportedBy}`);
     
@@ -228,10 +281,13 @@ app.get('/api/reports', (req, res) => {
   try {
     const reportsList = db.prepare('SELECT * FROM reports').all();
     console.log(`✓ Fetched ${reportsList.length} reports`);
-    res.json({ success: true, data: reportsList.map((report) => ({
-      ...report,
-      location: { address: report.location_address, lat: report.latitude, lng: report.longitude },
-    })) });
+    res.json({ success: true, data: reportsList.map((report) => {
+      const normalized = normalizeReport(report);
+      return {
+        ...normalized,
+        location: { address: normalized.location_address, lat: normalized.latitude, lng: normalized.longitude },
+      };
+    }) });
   } catch (error) {
     res.status(500).json({ success: false, error: String(error) });
   }
@@ -240,12 +296,17 @@ app.get('/api/reports', (req, res) => {
 app.get('/api/reports/user/:userId', (req, res) => {
   try {
     const userId = req.params.userId;
-    const userReports = db.prepare('SELECT * FROM reports WHERE reportedBy = ?').all(userId);
+    const reportColumns = db.prepare('PRAGMA table_info(reports)').all().map((column) => column.name);
+    const whereColumn = reportColumns.includes('reportedBy') ? 'reportedBy' : reportColumns.includes('reported_by') ? 'reported_by' : 'reportedBy';
+    const userReports = db.prepare(`SELECT * FROM reports WHERE ${whereColumn} = ?`).all(userId);
     console.log(`✓ Fetched ${userReports.length} reports for user ${userId}`);
-    res.json({ success: true, data: userReports.map((report) => ({
-      ...report,
-      location: { address: report.location_address, lat: report.latitude, lng: report.longitude },
-    })) });
+    res.json({ success: true, data: userReports.map((report) => {
+      const normalized = normalizeReport(report);
+      return {
+        ...normalized,
+        location: { address: normalized.location_address, lat: normalized.latitude, lng: normalized.longitude },
+      };
+    }) });
   } catch (error) {
     res.status(500).json({ success: false, error: String(error) });
   }
@@ -262,11 +323,26 @@ app.put('/api/reports/:id', (req, res) => {
     }
     
     const dateUpdated = new Date().toISOString();
-    db.prepare('UPDATE reports SET status = ?, dateUpdated = ? WHERE id = ?').run(status, dateUpdated, id);
+    const reportColumns = db.prepare('PRAGMA table_info(reports)').all().map((column) => column.name);
+    const updateColumns = ['status = ?'];
+    const updateValues = [status];
+
+    if (reportColumns.includes('dateUpdated')) {
+      updateColumns.push('dateUpdated = ?');
+      updateValues.push(dateUpdated);
+    }
+    if (reportColumns.includes('date_updated')) {
+      updateColumns.push('date_updated = ?');
+      updateValues.push(dateUpdated);
+    }
+
+    updateValues.push(id);
+    db.prepare(`UPDATE reports SET ${updateColumns.join(', ')} WHERE id = ?`).run(...updateValues);
     
     const updatedReport = db.prepare('SELECT * FROM reports WHERE id = ?').get(id);
+    const normalizedReport = normalizeReport(updatedReport);
     console.log(`✓ Report ${id} status updated to ${status}`);
-    res.json({ success: true, data: { ...updatedReport, location: { address: updatedReport.location_address, lat: updatedReport.latitude, lng: updatedReport.longitude } } });
+    res.json({ success: true, data: { ...normalizedReport, location: { address: normalizedReport.location_address, lat: normalizedReport.latitude, lng: normalizedReport.longitude } } });
   } catch (error) {
     res.status(500).json({ success: false, error: String(error) });
   }
@@ -294,7 +370,10 @@ app.get('/api/analytics', (req, res) => {
     for (let i = 5; i >= 0; i--) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const month = date.toISOString().slice(0, 7); // YYYY-MM
-      const count = reportsList.filter(r => r.dateReported.startsWith(month)).length;
+      const count = reportsList.filter((r) => {
+        const reportDate = getColumnValue(r, 'dateReported', 'date_reported') || '';
+        return reportDate.startsWith(month);
+      }).length;
       monthlyTrends.push({
         id: month,
         month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
@@ -363,9 +442,30 @@ app.post('/api/training', (req, res) => {
 
     const report = db.prepare('SELECT * FROM reports WHERE id = ?').get(reportId);
     if (report) {
-      db.prepare(
-        'UPDATE reports SET priority = ?, severity = ?, riskFactor = ?, dateUpdated = ? WHERE id = ?'
-      ).run(correctedPriority, correctedSeverity, correctedRiskFactor, new Date().toISOString(), reportId);
+      const reportColumns = db.prepare('PRAGMA table_info(reports)').all().map((column) => column.name);
+      const updateColumns = ['priority = ?', 'severity = ?'];
+      const updateValues = [correctedPriority, correctedSeverity];
+
+      if (reportColumns.includes('riskFactor')) {
+        updateColumns.push('riskFactor = ?');
+        updateValues.push(correctedRiskFactor);
+      }
+      if (reportColumns.includes('risk_factor')) {
+        updateColumns.push('risk_factor = ?');
+        updateValues.push(correctedRiskFactor);
+      }
+
+      if (reportColumns.includes('dateUpdated')) {
+        updateColumns.push('dateUpdated = ?');
+        updateValues.push(new Date().toISOString());
+      }
+      if (reportColumns.includes('date_updated')) {
+        updateColumns.push('date_updated = ?');
+        updateValues.push(new Date().toISOString());
+      }
+
+      updateValues.push(reportId);
+      db.prepare(`UPDATE reports SET ${updateColumns.join(', ')} WHERE id = ?`).run(...updateValues);
     }
     
     res.json({ success: true, message: 'Training data submitted' });
