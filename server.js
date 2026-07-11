@@ -4,6 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import Database from 'better-sqlite3';
 import { classifyReportWithColabModel } from './colab_model.js';
+import { findPotentialDuplicates, calculateSimilarity, consolidateReports } from './utils/deduplication.js';
 
 const app = express();
 const PORT = 3000;
@@ -312,6 +313,64 @@ app.get('/api/reports/user/:userId', (req, res) => {
   }
 });
 
+// Get consolidated reports (deduplicated)
+app.get('/api/reports/consolidated', (req, res) => {
+  try {
+    const reportsList = db.prepare('SELECT * FROM reports').all();
+    const consolidated = consolidateReports(reportsList);
+    
+    res.json({ 
+      success: true, 
+      data: consolidated.map((report) => {
+        const normalized = normalizeReport(report);
+        return {
+          ...normalized,
+          location: { address: normalized.location_address, lat: normalized.latitude, lng: normalized.longitude },
+        };
+      }),
+      stats: {
+        totalReports: reportsList.length,
+        consolidatedReports: consolidated.length,
+        duplicatesRemoved: reportsList.length - consolidated.length
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: String(error) });
+  }
+});
+
+// Get duplicates for a specific report
+app.get('/api/reports/:id/duplicates', (req, res) => {
+  try {
+    const reportId = req.params.id;
+    const reportsList = db.prepare('SELECT * FROM reports').all();
+    const report = reportsList.find(r => r.id === reportId);
+    
+    if (!report) {
+      return res.status(404).json({ success: false, error: 'Report not found' });
+    }
+    
+    const duplicates = findPotentialDuplicates(report, reportsList, 0.7);
+    
+    res.json({ 
+      success: true, 
+      data: {
+        masterReport: normalizeReport(report),
+        duplicates: duplicates.map(d => ({
+          ...normalizeReport(d),
+          similarity: d.similarity
+        })),
+        consolidationInfo: {
+          totalDuplicates: duplicates.length,
+          consolidatedCount: duplicates.length + 1
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: String(error) });
+  }
+});
+
 app.put('/api/reports/:id', (req, res) => {
   try {
     const { id } = req.params;
@@ -352,6 +411,7 @@ app.put('/api/reports/:id', (req, res) => {
 app.get('/api/analytics', (req, res) => {
   try {
     const reportsList = db.prepare('SELECT * FROM reports').all();
+    const consolidated = consolidateReports(reportsList);
     
     // Category distribution
     const categoryCount = {};
@@ -383,6 +443,8 @@ app.get('/api/analytics', (req, res) => {
     
     const analytics = {
       totalReports: reportsList.length,
+      consolidatedReports: consolidated.length,
+      duplicatesFound: reportsList.length - consolidated.length,
       pendingReports: reportsList.filter(r => r.status === 'Pending').length,
       inProgressReports: reportsList.filter(r => r.status === 'In Progress').length,
       resolvedReports: reportsList.filter(r => r.status === 'Resolved').length,
