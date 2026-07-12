@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { MapPin, AlertCircle, TrendingUp, Users } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useEffect } from "react";
-import { InfrastructureBackground } from "./InfrastructureBackground";
 
 export function Landing() {
   const navigate = useNavigate();
@@ -31,7 +30,6 @@ export function Landing() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950/60 text-white">
-      <InfrastructureBackground />
       <div className="relative z-10">
       {/* Header */}
       <header className="border-b bg-white/80 backdrop-blur-sm">
