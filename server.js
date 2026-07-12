@@ -4,7 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import Database from 'better-sqlite3';
 import { classifyReportWithColabModel } from './colab_model.js';
-import { findPotentialDuplicates, calculateSimilarity, consolidateReports } from './utils/deduplication.js';
+import { findPotentialDuplicates, consolidateReports } from './utils/deduplication.js';
 
 const app = express();
 const PORT = 3000;
@@ -317,7 +317,7 @@ app.get('/api/reports/user/:userId', (req, res) => {
 app.get('/api/reports/consolidated', (req, res) => {
   try {
     const reportsList = db.prepare('SELECT * FROM reports').all();
-    const consolidated = consolidateReports(reportsList);
+    const consolidated = consolidateReports(reportsList, 50); // 50 meters threshold
     
     res.json({ 
       success: true, 
@@ -350,7 +350,7 @@ app.get('/api/reports/:id/duplicates', (req, res) => {
       return res.status(404).json({ success: false, error: 'Report not found' });
     }
     
-    const duplicates = findPotentialDuplicates(report, reportsList, 0.7);
+    const duplicates = findPotentialDuplicates(report, reportsList, 50); // 50 meters threshold
     
     res.json({ 
       success: true, 
@@ -358,11 +358,13 @@ app.get('/api/reports/:id/duplicates', (req, res) => {
         masterReport: normalizeReport(report),
         duplicates: duplicates.map(d => ({
           ...normalizeReport(d),
-          similarity: d.similarity
+          distanceMeters: d.distance
         })),
         consolidationInfo: {
           totalDuplicates: duplicates.length,
-          consolidatedCount: duplicates.length + 1
+          consolidatedCount: duplicates.length + 1,
+          sameCategory: report.category,
+          locationThreshold: '50 meters'
         }
       }
     });
@@ -411,7 +413,7 @@ app.put('/api/reports/:id', (req, res) => {
 app.get('/api/analytics', (req, res) => {
   try {
     const reportsList = db.prepare('SELECT * FROM reports').all();
-    const consolidated = consolidateReports(reportsList);
+    const consolidated = consolidateReports(reportsList, 50); // 50 meters threshold
     
     // Category distribution
     const categoryCount = {};

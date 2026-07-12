@@ -1,78 +1,57 @@
 // Similarity detection for report consolidation
-export function calculateSimilarity(str1, str2) {
-  const s1 = str1.toLowerCase().trim();
-  const s2 = str2.toLowerCase().trim();
-  
-  if (s1 === s2) return 1.0;
-  
-  // Levenshtein distance based similarity
-  const longer = s1.length > s2.length ? s1 : s2;
-  const shorter = s1.length > s2.length ? s2 : s1;
-  
-  if (longer.length === 0) return 1.0;
-  
-  const editDistance = getEditDistance(longer, shorter);
-  return (longer.length - editDistance) / longer.length;
+export function calculateLocationDistance(lat1, lon1, lat2, lon2) {
+  // Calculate distance in meters using Haversine formula
+  const R = 6371000; // Earth's radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
-function getEditDistance(s1, s2) {
-  const costs = [];
-  for (let i = 0; i <= s1.length; i++) {
-    let lastValue = i;
-    for (let j = 0; j <= s2.length; j++) {
-      if (i === 0) {
-        costs[j] = j;
-      } else if (j > 0) {
-        let newValue = costs[j - 1];
-        if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
-          newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-        }
-        costs[j - 1] = lastValue;
-        lastValue = newValue;
-      }
-    }
-    if (i > 0) costs[s2.length] = lastValue;
-  }
-  return costs[s2.length];
-}
-
-// Find potential duplicates for a report
-export function findPotentialDuplicates(report, allReports, similarityThreshold = 0.7) {
+// Find potential duplicates based on exact location + exact category
+export function findPotentialDuplicates(report, allReports, locationThresholdMeters = 50) {
   const duplicates = [];
   
   for (const otherReport of allReports) {
     // Skip same report
     if (report.id === otherReport.id) continue;
     
-    // Check if same category and nearby location
+    // Must be exact same category
     if (report.category !== otherReport.category) continue;
     
-    // Calculate text similarity
-    const titleSimilarity = calculateSimilarity(report.title || '', otherReport.title || '');
-    const descSimilarity = calculateSimilarity(report.description || '', otherReport.description || '');
-    const avgSimilarity = (titleSimilarity + descSimilarity) / 2;
+    // Check if location is within threshold distance
+    const lat1 = report.latitude || 0;
+    const lon1 = report.longitude || 0;
+    const lat2 = otherReport.latitude || 0;
+    const lon2 = otherReport.longitude || 0;
     
-    if (avgSimilarity >= similarityThreshold) {
+    const distance = calculateLocationDistance(lat1, lon1, lat2, lon2);
+    
+    // Within 50 meters (same issue location)
+    if (distance <= locationThresholdMeters) {
       duplicates.push({
         ...otherReport,
-        similarity: avgSimilarity
+        distance: Math.round(distance)
       });
     }
   }
   
-  return duplicates.sort((a, b) => b.similarity - a.similarity);
+  return duplicates.sort((a, b) => a.distance - b.distance);
 }
 
 // Consolidate duplicate reports into one master report with count
-export function consolidateReports(reports) {
+export function consolidateReports(reports, locationThresholdMeters = 50) {
   const seen = new Set();
   const consolidated = [];
   
   for (const report of reports) {
     if (seen.has(report.id)) continue;
     
-    // Find all duplicates for this report
-    const duplicates = findPotentialDuplicates(report, reports, 0.7);
+    // Find all duplicates for this report (same category + location)
+    const duplicates = findPotentialDuplicates(report, reports, locationThresholdMeters);
     const duplicateIds = duplicates.map(d => d.id);
     
     // Mark all duplicates as seen
