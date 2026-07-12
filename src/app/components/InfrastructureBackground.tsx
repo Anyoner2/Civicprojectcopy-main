@@ -6,11 +6,12 @@ export function InfrastructureBackground() {
         className="absolute inset-0 bg-cover bg-center"
         style={{
           backgroundImage:
-            'url("https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1600&q=80")',
+            'url("https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=1600&q=80")',
           backgroundPosition: "center",
+          backgroundAttachment: "fixed",
         }}
       />
-      <div className="absolute inset-0 bg-slate-950/20" />
+      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/70 via-slate-900/50 to-slate-950/70" />
     </div>
   );
 }
